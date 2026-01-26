@@ -32,6 +32,12 @@ type Server struct {
 	Storage      Storage
 	Vertex       *vertex.VertexChecker
 	OIDCProvider op.OpenIDProvider
+	BypassWoT    bool
+}
+
+// ExternalWhitelistDB interface for external database whitelist checks
+type ExternalWhitelistDB interface {
+	IsNpubWhitelisted(ctx context.Context, pubkey interface{}) (bool, error)
 }
 
 // simple counter for request IDs
@@ -115,7 +121,7 @@ func SetupServer(server *Server, extraOptions ...op.Option) chi.Router {
 	router.Mount("/login", http.StripPrefix("/login", l.router))
 
 	// Mount signup routes
-	signupRouter := NewSignupHandler(server.Storage, server.Vertex)
+	signupRouter := NewSignupHandler(server.Storage, server.Vertex, server.BypassWoT)
 	router.Mount("/signup", http.StripPrefix("/signup", signupRouter))
 
 	adminRouter := NewAdminHandler(server)

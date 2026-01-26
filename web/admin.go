@@ -556,9 +556,10 @@ func (s *adminHandler) updateConfiguration(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if inputConfig.RegistrationType == "open" && (emptyNsecField || !nsecRegistered) {
+	// nsec is required for open registration only when WoT is enabled
+	if inputConfig.RegistrationType == "open" && !s.server.BypassWoT && (emptyNsecField || !nsecRegistered) {
 		writeHtmlNotification(templates.NotifInfo{
-			Msg:  "You don't have a valid nsec. You need one for open registration type",
+			Msg:  "You don't have a valid nsec. You need one for open registration type (unless BYPASS_WOT is enabled)",
 			Type: notificationTypeError,
 		}, r, w)
 		return

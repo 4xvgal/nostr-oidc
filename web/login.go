@@ -182,6 +182,7 @@ type signupHandler struct {
 	vertex           *vertex.VertexChecker
 	mu               sync.Mutex
 	activeChallenges map[string]string // maps challenge to IP for one-time use
+	bypassWoT        bool
 }
 
 // writeHtmlNotification sends a notification template as HTMX response
@@ -195,11 +196,12 @@ func writeHtmlNotification(info templates.NotifInfo, r *http.Request, w http.Res
 }
 
 // NewSignupHandler creates a new signup handler
-func NewSignupHandler(storage Storage, vtx *vertex.VertexChecker) chi.Router {
+func NewSignupHandler(storage Storage, vtx *vertex.VertexChecker, bypassWoT bool) chi.Router {
 	s := &signupHandler{
 		storage:          storage,
 		activeChallenges: make(map[string]string),
 		vertex:           vtx,
+		bypassWoT:        bypassWoT,
 	}
 	router := chi.NewRouter()
 	router.Get("/", s.displaySignupForm)
@@ -351,31 +353,35 @@ func (s *signupHandler) processSignup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	valid, err := s.vertex.NpubHasEnoughReputation(r.Context(), pubkey)
-	if err != nil {
-		if errors.Is(err, vertex.RelayError) {
-			slog.Error("There was a problem with vertex", slog.String("type", "vertex"), slog.Any("error", err))
+	if !s.bypassWoT {
+		valid, err := s.vertex.NpubHasEnoughReputation(r.Context(), pubkey)
+		if err != nil {
+			if errors.Is(err, vertex.RelayError) {
+				slog.Error("There was a problem with vertex", slog.String("type", "vertex"), slog.Any("error", err))
+				writeHtmlNotification(templates.NotifInfo{
+					Msg:  "There was a problem validating your npub",
+					Type: notificationTypeError,
+				}, r, w)
+				return
+
+			}
+			// User already exists
 			writeHtmlNotification(templates.NotifInfo{
-				Msg:  "There was a problem validating your npub",
-				Type: notificationTypeError,
+				Msg:  "There was a problem signing you up",
+				Type: notificationTypeWarning,
 			}, r, w)
 			return
-
 		}
-		// User already exists
-		writeHtmlNotification(templates.NotifInfo{
-			Msg:  "There was a problem signing you up",
-			Type: notificationTypeWarning,
-		}, r, w)
-		return
-	}
 
-	if !valid {
-		writeHtmlNotification(templates.NotifInfo{
-			Msg:  "Your npub does not have enough web of trust",
-			Type: notificationTypeWarning,
-		}, r, w)
-		return
+		if !valid {
+			writeHtmlNotification(templates.NotifInfo{
+				Msg:  "Your npub does not have enough web of trust",
+				Type: notificationTypeWarning,
+			}, r, w)
+			return
+		}
+	} else {
+		slog.Info("WoT bypass: skipping reputation check", slog.String("npub", hex.EncodeToString(schnorr.SerializePubKey(pubkey))))
 	}
 
 	// Create new user

@@ -29,13 +29,14 @@ import (
 )
 
 const ADMIN_USER_NPUB = "ADMIN_USER_NPUB"
+const BYPASS_WOT = "BYPASS_WOT"
 
 func main() {
 	// Load .env file if it exists
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found or error loading it, using environment variables")
-  }
-  
+	}
+
 	err := libsecret.SetupKeychain()
 	if err != nil {
 		log.Fatalf("libsecret.SetupKeychain() %v", err)
@@ -63,6 +64,11 @@ func main() {
 		log.Fatalf("failed to ensure default configuration: %v", err)
 	}
 
+	// Set nsec from environment variable if provided
+	if err := ensureNsecFromEnv(context.Background(), os.Getenv(NSEC), &storage); err != nil {
+		log.Fatalf("failed to set nsec from environment: %v", err)
+	}
+
 	if err := ensureAdminEnvNpubIsRegistedAsAdmin(os.Getenv(ADMIN_USER_NPUB), &storage); err != nil {
 		log.Fatalf("failed to register nsec admin user: %v", err)
 	}
@@ -75,11 +81,16 @@ func main() {
 	if err != nil {
 		log.Fatalf("storage.GetConfigurationWithNsec(context.Background()). %v", err)
 	}
+	bypassWoT := os.Getenv(BYPASS_WOT) == "true"
 
 	server := web.Server{
-		Storage: &storage,
+		Storage:   &storage,
+		BypassWoT: bypassWoT,
 	}
 
+	if bypassWoT {
+		slog.Warn("WoT bypass mode enabled - all users will be accepted without WoT verification")
+	}
 	if config.RegistrationType == "open" {
 		if config.Nsec == nil {
 			log.Panicf("you don't have an nsec in your configuration. This should have never happened because it should have been required when making the registration type opened")
