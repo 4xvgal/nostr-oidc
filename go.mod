@@ -3,7 +3,6 @@ module github.com/lescuer97/nostr-oicd
 go 1.25.4
 
 require (
-	github.com/a-h/templ v0.3.960
 	github.com/btcsuite/btcd/btcec/v2 v2.3.5
 	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-jose/go-jose/v4 v4.0.5

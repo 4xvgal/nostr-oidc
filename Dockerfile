@@ -1,8 +1,8 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git gcc musl-dev sqlite-dev nodejs npm
+RUN apk add --no-cache git gcc musl-dev sqlite-dev nodejs npm libsecret-dev pkgconfig
 
 WORKDIR /app
 
@@ -17,6 +17,9 @@ RUN go install github.com/a-h/templ/cmd/templ@latest
 
 # Generate templ files
 RUN templ generate
+
+# Add templ dependency (needed for generated _templ.go files)
+RUN go get github.com/a-h/templ
 
 # Install pnpm and build static assets
 RUN npm install -g pnpm@10.21.0 && \
