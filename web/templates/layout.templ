@@ -35,7 +35,9 @@ templ Layout(title string, headContent templ.Component) {
 				</script>
 			}
 			<script src="/static/dist/app.js" defer></script>
+			<script src="/static/js/modal.js" defer></script>
 			<link rel="stylesheet" href="/static/dist/tailwind.css"/>
+			<link rel="stylesheet" href="/static/css/loading.css"/>
 		</head>
 		<body hx-ext="preload" class="bg-gray-50 text-gray-900 dark:bg-gray-900 dark:text-gray-100">
 			<div hx-ext="remove-me" id="notifications"></div>

@@ -1,0 +1,232 @@
+package templates
+
+import (
+	"fmt"
+	"time"
+)
+
+// AdminAPIKeysPage renders the main API Keys management page
+templ AdminAPIKeysPage() {
+	@Layout("API Key Management", adminImport()) {
+		<div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 py-8 px-4 sm:px-6 lg:px-8">
+			<div class="max-w-7xl mx-auto dark:text-white">
+				<!-- Header Section -->
+				<div class="mb-8 flex items-center justify-between">
+					<div>
+						<h1 class="text-4xl font-bold text-gray-900 dark:text-white">API Keys</h1>
+						<p class="mt-2 text-lg text-gray-600 dark:text-gray-300">Manage your API keys for programmatic access</p>
+					</div>
+					<a
+						href="/admin/apikeys/create"
+						class="inline-flex items-center justify-center px-6 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors shadow-md hover:shadow-lg"
+					>
+						<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+						</svg>
+						Create New API Key
+					</a>
+				</div>
+
+				<!-- Info Alert -->
+				<div class="mb-6 p-4 rounded-lg bg-blue-50 dark:bg-blue-900/20 text-blue-800 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+					<div class="flex items-start">
+						<svg class="w-5 h-5 mr-3 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+							<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+						</svg>
+						<div>
+							<p class="text-sm font-medium">API Keys are used for programmatic access to user management endpoints</p>
+							<p class="text-xs mt-1 opacity-80">Keep your API keys secure. Never share them publicly or commit them to version control.</p>
+						</div>
+					</div>
+				</div>
+
+				<!-- API Keys List Container -->
+				<div
+					hx-get="/admin/apikeys/list"
+					hx-trigger="load"
+					hx-swap="innerHTML"
+				></div>
+			</div>
+		</div>
+	}
+}
+
+// AdminAPIKeyCreatePage renders the create API key page
+templ AdminAPIKeyCreatePage() {
+	@Layout("Create API Key", adminImport()) {
+		<div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 py-8 px-4 sm:px-6 lg:px-8">
+			<div class="max-w-lg mx-auto">
+				<div class="mb-6">
+					<a href="/admin/apikeys" class="text-indigo-600 dark:text-indigo-400 hover:underline text-sm">&larr; Back to API Keys</a>
+				</div>
+
+				<div id="formContainer">
+					@APIKeyForm()
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// APIKeyForm renders the create form
+templ APIKeyForm() {
+	<div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6">
+		<h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">Create New API Key</h1>
+
+		<form hx-post="/admin/apikeys" hx-target="#formContainer" hx-swap="innerHTML" class="space-y-6">
+			<div>
+				@TextInput(
+					"label",
+					"Key Label",
+					"e.g., Production Server, Development, etc.",
+					nil,
+					true,
+					"A descriptive label to identify this API key",
+					false,
+					nil,
+				)
+			</div>
+
+			<div class="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+				<a
+					href="/admin/apikeys"
+					class="px-6 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
+				>
+					Cancel
+				</a>
+				<button
+					type="submit"
+					class="px-8 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors shadow-md hover:shadow-lg"
+				>
+					Create API Key
+				</button>
+			</div>
+		</form>
+	</div>
+}
+
+// APIKeyCreatedResult renders the result after successful creation (replaces form)
+templ APIKeyCreatedResult(rawKey string, label string) {
+	<div class="bg-white dark:bg-gray-800 rounded-xl shadow p-6">
+		<div class="text-center mb-6">
+			<div class="mx-auto w-12 h-12 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mb-4">
+				<svg class="w-6 h-6 text-green-600 dark:text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+				</svg>
+			</div>
+			<h1 class="text-2xl font-bold text-gray-900 dark:text-white">API Key Created</h1>
+		</div>
+
+		<!-- Warning -->
+		<div class="mb-6 p-4 rounded-lg bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800">
+			<div class="flex items-start">
+				<svg class="w-5 h-5 mr-3 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+					<path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+				</svg>
+				<div>
+					<p class="text-sm font-medium">This is the only time you'll see the full API key</p>
+					<p class="text-xs mt-1 opacity-80">Copy and save it securely now.</p>
+				</div>
+			</div>
+		</div>
+
+		<!-- Key Display -->
+		<div class="mb-4">
+			<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Your API Key</label>
+			<div class="flex gap-2">
+				<input
+					type="text"
+					id="apiKeyValue"
+					readonly
+					value={ rawKey }
+					class="flex-1 px-4 py-3 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg font-mono text-xs text-gray-900 dark:text-gray-100"
+				/>
+				<button
+					type="button"
+					onclick="navigator.clipboard.writeText(document.getElementById('apiKeyValue').value); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy', 2000)"
+					class="px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-sm"
+				>
+					Copy
+				</button>
+			</div>
+		</div>
+
+		<!-- Label -->
+		<div class="mb-6">
+			<label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Label</label>
+			<div class="px-4 py-3 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-gray-100">
+				{ label }
+			</div>
+		</div>
+
+		<a
+			href="/admin/apikeys"
+			class="block w-full text-center px-6 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white text-sm font-medium transition-colors shadow-md hover:shadow-lg"
+		>
+			Done
+		</a>
+	</div>
+}
+
+
+// APIKeyList renders the API keys table
+templ APIKeyList(keys []APIKeyListItem) {
+	if len(keys) == 0 {
+		<div class="bg-white dark:bg-gray-800 rounded-xl shadow p-8 text-center">
+			<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path>
+			</svg>
+			<h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">No API Keys</h3>
+			<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Create your first API key to get started</p>
+		</div>
+	} else {
+		<div class="bg-white dark:bg-gray-800 rounded-xl shadow overflow-hidden">
+			<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+				<thead class="bg-gray-50 dark:bg-gray-700">
+					<tr>
+						<th class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Label</th>
+						<th class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Key Prefix</th>
+						<th class="px-6 py-4 text-left text-sm font-semibold text-gray-900 dark:text-white">Created</th>
+						<th class="px-6 py-4 text-right text-sm font-semibold text-gray-900 dark:text-white">Actions</th>
+					</tr>
+				</thead>
+				<tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+					for _, key := range keys {
+						<tr class="hover:bg-gray-50 dark:hover:bg-gray-700">
+							<td class="px-6 py-4 text-sm font-medium text-gray-900 dark:text-white">{ key.Label }</td>
+							<td class="px-6 py-4 text-sm font-mono text-gray-600 dark:text-gray-300">{ key.KeyPrefix }</td>
+							<td class="px-6 py-4 text-sm text-gray-600 dark:text-gray-300">{ formatTime(key.CreatedAt) }</td>
+							<td class="px-6 py-4 text-right">
+								<button
+									hx-delete={ fmt.Sprintf("/admin/apikeys/%s", key.ID) }
+									hx-confirm="Are you sure you want to delete this API key?"
+									hx-target="closest tr"
+									hx-swap="outerHTML"
+									class="text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300 text-sm"
+								>
+									Delete
+								</button>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+// ========== Helper Types and Functions ==========
+
+type APIKeyListItem struct {
+	ID         string
+	Label      string
+	KeyPrefix  string
+	CreatedAt  time.Time
+	LastUsedAt *time.Time
+	CreatedBy  string
+	IsActive   bool
+}
+
+func formatTime(t time.Time) string {
+	return t.Format("Jan 2, 2006")
+}

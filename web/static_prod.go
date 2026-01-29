@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-//go:embed static/dist/**
+//go:embed static/dist/** static/js/** static/css/**
 var embeddedStatic embed.FS
 
 func getStaticFileSystem() http.FileSystem {

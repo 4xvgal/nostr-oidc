@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -18,6 +20,7 @@ import (
 	"github.com/lescuer97/nostr-oicd/utils"
 	"github.com/lescuer97/nostr-oicd/vertex"
 	"github.com/lescuer97/nostr-oicd/web/templates"
+	"github.com/zitadel/oidc/v3/pkg/oidc"
 )
 
 var decoder = form.NewDecoder()
@@ -63,6 +66,13 @@ func NewAdminHandler(server *Server) chi.Router {
 	router.Get("/client/{id}", s.editClientFormById)
 
 	router.Get("/configuration", s.configuration)
+
+	// API Keys pages (unprotected - auth handled in POST)
+	router.Get("/apikeys", s.apiKeysPage)
+	router.Get("/apikeys/create", s.apiKeysCreateForm)
+
+	// User management page (unprotected - auth handled by HTMX)
+	router.Get("/users-api", s.usersPage)
 	// --- Protected Routes Group ---
 	// All routes mounted within this group will have the AuthMiddleware applied.
 	router.Group(func(r chi.Router) {
@@ -85,6 +95,19 @@ func NewAdminHandler(server *Server) chi.Router {
 		r.Get("/users", s.usersList)
 
 		r.Get("/admin_users", s.adminUsersList)
+
+		// API Key management routes (protected endpoints)
+		r.Get("/apikeys/list", s.apiKeysList)
+		r.Post("/apikeys", s.apiKeysCreate)
+		r.Delete("/apikeys/{id}", s.apiKeysDelete)
+
+		// User management API routes (protected AJAX endpoints)
+		r.Get("/users-api/list", s.usersListAPI)    // AJAX list refresh
+		r.Get("/users-api/create", s.usersCreateForm)
+		r.Post("/users-api", s.usersCreate)
+		r.Get("/users-api/{pubkey}/edit", s.usersEditForm)
+		r.Put("/users-api/{pubkey}", s.usersUpdate)
+		r.Delete("/users-api/{pubkey}", s.usersDelete)
 	})
 
 	return router
@@ -605,6 +628,475 @@ func (s *adminHandler) updateConfiguration(w http.ResponseWriter, r *http.Reques
 		Type: notificationTypeSuccess,
 	}, r, w)
 }
+
+// ========== API KEY MANAGEMENT HANDLERS ==========
+
+// apiKeysPage renders the main API keys management page
+func (s *adminHandler) apiKeysPage(w http.ResponseWriter, r *http.Request) {
+	templates.AdminAPIKeysPage().Render(r.Context(), w)
+}
+
+// apiKeysList renders the API keys list via AJAX
+func (s *adminHandler) apiKeysList(w http.ResponseWriter, r *http.Request) {
+	keys, err := s.server.Storage.GetAllAPIKeys(r.Context())
+	if err != nil {
+		slog.Error("failed to get API keys", slog.Any("error", err))
+		writeHtmlNotification(templates.NotifInfo{
+			Msg:  "Failed to retrieve API keys",
+			Type: notificationTypeError,
+		}, r, w)
+		return
+	}
+
+	// Convert storage.APIKey to template APIKeyListItem
+	keyItems := make([]templates.APIKeyListItem, 0, len(keys))
+	for _, key := range keys {
+		item := templates.APIKeyListItem{
+			ID:        key.ID,
+			Label:     key.Label,
+			KeyPrefix: key.KeyPrefix,
+			CreatedAt: key.CreatedAt,
+			LastUsedAt: key.LastUsedAt,
+			CreatedBy: key.CreatedBy,
+			IsActive:  key.IsActive,
+		}
+		keyItems = append(keyItems, item)
+	}
+
+	templates.APIKeyList(keyItems).Render(r.Context(), w)
+}
+
+// apiKeysCreateForm renders the create API key page
+func (s *adminHandler) apiKeysCreateForm(w http.ResponseWriter, r *http.Request) {
+	templates.AdminAPIKeyCreatePage().Render(r.Context(), w)
+}
+
+// apiKeysCreate handles API key creation
+func (s *adminHandler) apiKeysCreate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		slog.Error("failed to parse form", slog.Any("error", err))
+		templates.NotificationAlert("error", "Failed to parse form").Render(r.Context(), w)
+		return
+	}
+
+	// Extract form data
+	label := r.FormValue("label")
+	if label == "" {
+		templates.NotificationAlert("error", "Label is required").Render(r.Context(), w)
+		return
+	}
+
+	// Get current user from context (via AuthMiddleware)
+	userClaims, ok := r.Context().Value(userContextKey).(*oidc.IDTokenClaims)
+	if !ok {
+		templates.NotificationAlert("error", "User information not found").Render(r.Context(), w)
+		return
+	}
+
+	// Create API key via storage
+	_, rawKey, err := s.server.Storage.CreateAPIKey(r.Context(), label, userClaims.Subject)
+	if err != nil {
+		slog.Error("failed to create API key", slog.Any("error", err))
+		http.Error(w, "Failed to create API key", http.StatusInternalServerError)
+		return
+	}
+
+	// Store raw API key in memory store for later use in user management handlers
+	s.server.APIKeyStore.Store(userClaims.Subject, rawKey)
+
+	// Render the result (replaces form via HTMX)
+	templates.APIKeyCreatedResult(rawKey, label).Render(r.Context(), w)
+}
+
+// apiKeysDelete handles API key deletion
+func (s *adminHandler) apiKeysDelete(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+
+	// Delete API key via storage
+	err := s.server.Storage.DeleteAPIKey(r.Context(), id)
+	if err != nil {
+		slog.Error("failed to delete API key", slog.Any("error", err))
+		w.WriteHeader(http.StatusInternalServerError)
+		templates.NotificationAlert("error", "Failed to delete API key").Render(r.Context(), w)
+		return
+	}
+
+	// Success - reload API keys list
+	keys, _ := s.server.Storage.GetAllAPIKeys(r.Context())
+	keyItems := make([]templates.APIKeyListItem, 0, len(keys))
+	for _, key := range keys {
+		item := templates.APIKeyListItem{
+			ID:        key.ID,
+			Label:     key.Label,
+			KeyPrefix: key.KeyPrefix,
+			CreatedAt: key.CreatedAt,
+			LastUsedAt: key.LastUsedAt,
+			CreatedBy: key.CreatedBy,
+			IsActive:  key.IsActive,
+		}
+		keyItems = append(keyItems, item)
+	}
+	templates.APIKeyList(keyItems).Render(r.Context(), w)
+}
+
+// ========== NEW USER MANAGEMENT (API) HANDLERS (Week 2) ==========
+
+// usersPage renders the main users management page
+func (s *adminHandler) usersPage(w http.ResponseWriter, r *http.Request) {
+	templates.AdminUsersPage().Render(r.Context(), w)
+}
+
+// usersListAPI renders the users list via AJAX (for API users page)
+func (s *adminHandler) usersListAPI(w http.ResponseWriter, r *http.Request) {
+	users, err := s.server.Storage.GetAllUsers(r.Context())
+	if err != nil {
+		slog.Error("failed to get users", slog.Any("error", err))
+		writeHtmlNotification(templates.NotifInfo{
+			Msg:  "Failed to retrieve users",
+			Type: notificationTypeError,
+		}, r, w)
+		return
+	}
+
+	// Get filter parameters from query string
+	searchQuery := strings.TrimSpace(r.URL.Query().Get("search"))
+	languageFilter := r.URL.Query().Get("language")
+	statusFilter := r.URL.Query().Get("status")
+	roleFilter := r.URL.Query().Get("role")
+
+	// Get pagination parameters
+	page := 1
+	limit := 10
+	if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+		}
+	}
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+
+	// Convert storage.User to template UserListItem and apply filters
+	userItems := make([]templates.UserListItem, 0, len(users))
+	for _, user := range users {
+		pubkeyHex := convertPubKeyToHex(user.Npub)
+
+		// Apply search filter (case-insensitive substring match on pubkey)
+		if searchQuery != "" {
+			if !strings.Contains(strings.ToLower(pubkeyHex), strings.ToLower(searchQuery)) {
+				continue
+			}
+		}
+
+		// Apply language filter
+		if languageFilter != "" && user.PreferredLanguage.String() != languageFilter {
+			continue
+		}
+
+		// Apply status filter
+		if statusFilter != "" {
+			if statusFilter == "active" && !user.Active {
+				continue
+			}
+			if statusFilter == "inactive" && user.Active {
+				continue
+			}
+		}
+
+		// Apply role filter
+		if roleFilter != "" {
+			if roleFilter == "admin" && !user.IsAdmin {
+				continue
+			}
+			if roleFilter == "user" && user.IsAdmin {
+				continue
+			}
+		}
+
+		item := templates.UserListItem{
+			Pubkey:            pubkeyHex,
+			PreferredLanguage: user.PreferredLanguage.String(),
+			IsAdmin:           user.IsAdmin,
+			Active:            user.Active,
+		}
+		userItems = append(userItems, item)
+	}
+
+	// Calculate pagination
+	totalItems := len(userItems)
+	totalPages := (totalItems + limit - 1) / limit
+	if totalPages == 0 {
+		totalPages = 1
+	}
+	if page > totalPages {
+		page = totalPages
+	}
+
+	// Apply pagination
+	startIdx := (page - 1) * limit
+	endIdx := startIdx + limit
+	if startIdx >= totalItems {
+		startIdx = 0
+		endIdx = 0
+		userItems = []templates.UserListItem{}
+	} else {
+		if endIdx > totalItems {
+			endIdx = totalItems
+		}
+		userItems = userItems[startIdx:endIdx]
+	}
+
+	// Render view with pagination info
+	paginationInfo := templates.PaginationInfo{
+		CurrentPage: page,
+		TotalPages:  totalPages,
+		TotalItems:  totalItems,
+		ItemsPerPage: limit,
+		HasPrevPage: page > 1,
+		HasNextPage: page < totalPages,
+	}
+
+	templates.UserListViewWithPagination(userItems, paginationInfo).Render(r.Context(), w)
+}
+
+// usersCreateForm renders the create user form modal
+func (s *adminHandler) usersCreateForm(w http.ResponseWriter, r *http.Request) {
+	templates.UserCreateForm(templates.LanguageOptions()).Render(r.Context(), w)
+}
+
+// usersCreate handles user creation via API client
+func (s *adminHandler) usersCreate(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		slog.Error("failed to parse form", slog.Any("error", err))
+		templates.NotificationAlert("error", "Failed to parse form").Render(r.Context(), w)
+		return
+	}
+
+	// Get API key from store
+	userClaims, ok := r.Context().Value(userContextKey).(*oidc.IDTokenClaims)
+	if !ok {
+		templates.NotificationAlert("error", "User information not found").Render(r.Context(), w)
+		return
+	}
+
+	apiKey, hasKey := s.server.APIKeyStore.Get(userClaims.Subject)
+	if !hasKey {
+		templates.NotificationAlert("error", "API key not configured. Please create an API key first in API Keys section.").Render(r.Context(), w)
+		return
+	}
+
+	// Extract form data
+	pubkey := r.FormValue("pubkey")
+	language := r.FormValue("preferred_language")
+	isAdmin := r.FormValue("is_admin") == "on"
+	active := r.FormValue("active") == "on"
+
+	if pubkey == "" {
+		templates.NotificationAlert("error", "Public key is required").Render(r.Context(), w)
+		return
+	}
+
+	// Create API client
+	apiClient := NewAPIClient("http://localhost:8082")
+
+	// Call API to create user
+	userReq := &UserRequest{
+		Pubkey:            pubkey,
+		PreferredLanguage: language,
+		IsAdmin:           isAdmin,
+		Active:            active,
+	}
+
+	_, err := apiClient.CreateUser(apiKey, userReq)
+	if err != nil {
+		apiErr, ok := err.(*APIError)
+		if ok {
+			templates.NotificationAlert("error", fmt.Sprintf("%s: %s", apiErr.ErrorCode, apiErr.Message)).Render(r.Context(), w)
+		} else {
+			templates.NotificationAlert("error", err.Error()).Render(r.Context(), w)
+		}
+		return
+	}
+
+	// Success
+	templates.NotificationAlert("success", "User created successfully").Render(r.Context(), w)
+	// Reload user list
+	users, _ := s.server.Storage.GetAllUsers(r.Context())
+	userItems := make([]templates.UserListItem, 0, len(users))
+	for _, user := range users {
+		item := templates.UserListItem{
+			Pubkey:            convertPubKeyToHex(user.Npub),
+			PreferredLanguage: user.PreferredLanguage.String(),
+			IsAdmin:           user.IsAdmin,
+			Active:            user.Active,
+		}
+		userItems = append(userItems, item)
+	}
+	templates.UserListView(userItems).Render(r.Context(), w)
+}
+
+// usersEditForm renders the edit user form modal
+func (s *adminHandler) usersEditForm(w http.ResponseWriter, r *http.Request) {
+	pubkey := chi.URLParam(r, "pubkey")
+
+	// Get API key from store
+	userClaims, ok := r.Context().Value(userContextKey).(*oidc.IDTokenClaims)
+	if !ok {
+		templates.NotificationAlert("error", "User information not found").Render(r.Context(), w)
+		return
+	}
+
+	apiKey, hasKey := s.server.APIKeyStore.Get(userClaims.Subject)
+	if !hasKey {
+		templates.NotificationAlert("error", "API key not configured. Please create an API key first in API Keys section.").Render(r.Context(), w)
+		return
+	}
+
+	// Create API client
+	apiClient := NewAPIClient("http://localhost:8082")
+
+	// Call API to get user
+	userResp, err := apiClient.GetUser(apiKey, pubkey)
+	if err != nil {
+		apiErr, ok := err.(*APIError)
+		if ok && apiErr.Status == 404 {
+			templates.NotificationAlert("error", "User not found").Render(r.Context(), w)
+		} else {
+			templates.NotificationAlert("error", "Failed to load user").Render(r.Context(), w)
+		}
+		return
+	}
+
+	userItem := templates.UserListItem{
+		Pubkey:            userResp.Pubkey,
+		PreferredLanguage: userResp.PreferredLanguage,
+		IsAdmin:           userResp.IsAdmin,
+		Active:            userResp.Active,
+	}
+
+	templates.UserEditForm(userItem, templates.LanguageOptions()).Render(r.Context(), w)
+}
+
+// usersUpdate handles user update via API client
+func (s *adminHandler) usersUpdate(w http.ResponseWriter, r *http.Request) {
+	pubkey := chi.URLParam(r, "pubkey")
+
+	if err := r.ParseForm(); err != nil {
+		slog.Error("failed to parse form", slog.Any("error", err))
+		templates.NotificationAlert("error", "Failed to parse form").Render(r.Context(), w)
+		return
+	}
+
+	// Get API key from store
+	userClaims, ok := r.Context().Value(userContextKey).(*oidc.IDTokenClaims)
+	if !ok {
+		templates.NotificationAlert("error", "User information not found").Render(r.Context(), w)
+		return
+	}
+
+	apiKey, hasKey := s.server.APIKeyStore.Get(userClaims.Subject)
+	if !hasKey {
+		templates.NotificationAlert("error", "API key not configured. Please create an API key first in API Keys section.").Render(r.Context(), w)
+		return
+	}
+
+	// Extract form data
+	language := r.FormValue("preferred_language")
+	isAdmin := r.FormValue("is_admin") == "on"
+	active := r.FormValue("active") == "on"
+
+	// Create API client
+	apiClient := NewAPIClient("http://localhost:8082")
+
+	// Call API to update user
+	userReq := &UserRequest{
+		Pubkey:            pubkey,
+		PreferredLanguage: language,
+		IsAdmin:           isAdmin,
+		Active:            active,
+	}
+
+	_, err := apiClient.UpdateUser(apiKey, pubkey, userReq)
+	if err != nil {
+		apiErr, ok := err.(*APIError)
+		if ok {
+			templates.NotificationAlert("error", fmt.Sprintf("%s: %s", apiErr.ErrorCode, apiErr.Message)).Render(r.Context(), w)
+		} else {
+			templates.NotificationAlert("error", err.Error()).Render(r.Context(), w)
+		}
+		return
+	}
+
+	// Success
+	templates.NotificationAlert("success", "User updated successfully").Render(r.Context(), w)
+	// Reload user list
+	users, _ := s.server.Storage.GetAllUsers(r.Context())
+	userItems := make([]templates.UserListItem, 0, len(users))
+	for _, user := range users {
+		item := templates.UserListItem{
+			Pubkey:            convertPubKeyToHex(user.Npub),
+			PreferredLanguage: user.PreferredLanguage.String(),
+			IsAdmin:           user.IsAdmin,
+			Active:            user.Active,
+		}
+		userItems = append(userItems, item)
+	}
+	templates.UserListView(userItems).Render(r.Context(), w)
+}
+
+// usersDelete handles user deletion via API client
+func (s *adminHandler) usersDelete(w http.ResponseWriter, r *http.Request) {
+	pubkey := chi.URLParam(r, "pubkey")
+
+	// Get API key from store
+	userClaims, ok := r.Context().Value(userContextKey).(*oidc.IDTokenClaims)
+	if !ok {
+		templates.NotificationAlert("error", "User information not found").Render(r.Context(), w)
+		return
+	}
+
+	apiKey, hasKey := s.server.APIKeyStore.Get(userClaims.Subject)
+	if !hasKey {
+		templates.NotificationAlert("error", "API key not configured. Please create an API key first in API Keys section.").Render(r.Context(), w)
+		return
+	}
+
+	// Create API client
+	apiClient := NewAPIClient("http://localhost:8082")
+
+	// Call API to delete user
+	err := apiClient.DeleteUser(apiKey, pubkey)
+	if err != nil {
+		apiErr, ok := err.(*APIError)
+		if ok {
+			w.WriteHeader(apiErr.Status)
+			templates.NotificationAlert("error", fmt.Sprintf("%s: %s", apiErr.ErrorCode, apiErr.Message)).Render(r.Context(), w)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+			templates.NotificationAlert("error", err.Error()).Render(r.Context(), w)
+		}
+		return
+	}
+
+	// Success - reload user list
+	users, _ := s.server.Storage.GetAllUsers(r.Context())
+	userItems := make([]templates.UserListItem, 0, len(users))
+	for _, user := range users {
+		item := templates.UserListItem{
+			Pubkey:            convertPubKeyToHex(user.Npub),
+			PreferredLanguage: user.PreferredLanguage.String(),
+			IsAdmin:           user.IsAdmin,
+			Active:            user.Active,
+		}
+		userItems = append(userItems, item)
+	}
+	templates.NotificationAlert("success", "User deleted successfully").Render(r.Context(), w)
+	templates.UserListView(userItems).Render(r.Context(), w)
+}
+
+// ========== END NEW USER MANAGEMENT HANDLERS ==========
 
 func transformConfigurationFormForm(form templates.ConfigurationForm, config *storage.Configuration) {
 	config.LastUpdated = uint64(time.Now().Unix())

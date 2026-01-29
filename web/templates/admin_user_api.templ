@@ -1,0 +1,560 @@
+package templates
+
+import (
+	"fmt"
+)
+
+// UserListItem represents a user in the list view
+type UserListItem struct {
+	Pubkey            string
+	PreferredLanguage string
+	IsAdmin           bool
+	Active            bool
+}
+
+// PaginationInfo contains pagination metadata
+type PaginationInfo struct {
+	CurrentPage  int
+	TotalPages   int
+	TotalItems   int
+	ItemsPerPage int
+	HasPrevPage  bool
+	HasNextPage  bool
+}
+
+// AdminUsersPage renders the main users management page
+templ AdminUsersPage() {
+	@Layout("User Management", adminImport()) {
+		<!-- Skip to main content link for keyboard navigation -->
+		<a href="#main-content" class="skip-link sr-only-focusable">Skip to main content</a>
+
+		<div class="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 py-8 px-4 sm:px-6 lg:px-8">
+			<div id="main-content" class="max-w-7xl mx-auto dark:text-white">
+				<!-- Header Section -->
+				<div class="mb-8 flex items-center justify-between">
+					<div>
+						<h1 class="text-4xl font-bold text-gray-900 dark:text-white">Users</h1>
+						<p class="mt-2 text-lg text-gray-600 dark:text-gray-300">Manage user accounts and access</p>
+					</div>
+					<button
+						hx-get="/admin/users-api/create"
+						hx-target="#userFormModal .modal-content" onclick="showModal()"
+						hx-swap="innerHTML"
+						class="inline-flex items-center justify-center px-6 py-3 rounded-lg bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white text-sm font-medium focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors shadow-md hover:shadow-lg dark:focus:ring-offset-gray-800 dark:focus:ring-indigo-400"
+						aria-label="Open create user form"
+					>
+						<svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+						</svg>
+						<span class="inline-flex items-center gap-2"><svg class="htmx-indicator w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Create User</span></span>
+					</button>
+				</div>
+
+				<!-- Alerts Section -->
+				<div id="alertsContainer" role="alert" aria-live="polite" aria-atomic="true"></div>
+
+				<!-- Search and Filter Section -->
+				<div class="mb-6 bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
+					<form
+						hx-get="/admin/users-api/list"
+						hx-target=".users-list-container"
+						hx-swap="innerHTML"
+						hx-trigger="input delay:300ms from:input, change from:select"
+						class="grid grid-cols-1 md:grid-cols-4 gap-4"
+						role="search"
+						aria-label="Search and filter users"
+					>
+						<div>
+							<label for="search-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+								Search
+							</label>
+							<input
+								type="text"
+								id="search-input"
+								name="search"
+								placeholder="Search by public key..."
+								aria-label="Search by public key"
+								class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent"
+							/>
+						</div>
+
+						<div>
+							<label for="language-filter" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+								Language
+							</label>
+							<select
+								id="language-filter"
+								name="language"
+								aria-label="Filter by language"
+								class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent"
+							>
+								<option value="">All Languages</option>
+								<option value="en">English</option>
+								<option value="es">Español</option>
+								<option value="pt">Português</option>
+								<option value="fr">Français</option>
+							</select>
+						</div>
+
+						<div>
+							<label for="status-filter" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+								Status
+							</label>
+							<select
+								id="status-filter"
+								name="status"
+								aria-label="Filter by status"
+								class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent"
+							>
+								<option value="">All Status</option>
+								<option value="active">Active</option>
+								<option value="inactive">Inactive</option>
+							</select>
+						</div>
+
+						<div>
+							<label for="role-filter" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+								Role
+							</label>
+							<select
+								id="role-filter"
+								name="role"
+								aria-label="Filter by role"
+								class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent"
+							>
+								<option value="">All Roles</option>
+								<option value="admin">Admin</option>
+								<option value="user">User</option>
+							</select>
+						</div>
+					</form>
+				</div>
+
+				<!-- Users List Container -->
+				<div
+					hx-get="/admin/users-api/list"
+					hx-trigger="load"
+					hx-swap="innerHTML"
+					class="users-list-container"
+				></div>
+			</div>
+		</div>
+
+		<!-- Modal for create/edit form -->
+		<div
+			id="userFormModal"
+			class="hidden fixed inset-0 z-50 overflow-y-auto"
+			role="dialog"
+			aria-modal="true"
+			aria-labelledby="modalTitle"
+			aria-hidden="true"
+		>
+			<div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+				<!-- Background overlay -->
+				<div
+					class="fixed inset-0 bg-gray-500 bg-opacity-75 dark:bg-gray-900 dark:bg-opacity-75 transition-opacity"
+					hx-on="click: this.closest('#userFormModal').classList.add('hidden')"
+					aria-hidden="true"
+				></div>
+
+				<!-- Modal content -->
+				<div class="inline-block align-bottom bg-white dark:bg-gray-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:align-middle sm:max-w-lg sm:w-full">
+					<button
+						type="button"
+						onclick="closeModal()"
+						class="absolute top-4 right-4 z-10 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded"
+						aria-label="Close modal"
+					>
+						<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+						</svg>
+					</button>
+
+					<div class="bg-white dark:bg-gray-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4 modal-content">
+						<!-- Form content will be loaded via HTMX -->
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// UserListView renders the users list
+templ UserListView(users []UserListItem) {
+	<div class="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg shadow-md">
+		if len(users) == 0 {
+			<div class="p-8 text-center text-gray-500 dark:text-gray-400">
+				<svg class="w-16 h-16 mx-auto mb-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3.623A2.623 2.623 0 011 18.377V5.623A2.623 2.623 0 013.623 3h12.754A2.623 2.623 0 0119 5.623v12.754A2.623 2.623 0 0116.377 21z"></path>
+				</svg>
+				<p>No users found. Create one to get started.</p>
+			</div>
+		} else {
+			<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700" role="table" aria-label="Users list">
+				<thead class="bg-gray-50 dark:bg-gray-700">
+					<tr>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider">Public Key</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider">Language</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider">Status</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider">Role</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider">Actions</th>
+					</tr>
+				</thead>
+				<tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+					for _, user := range users {
+						<tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+							<td class="px-6 py-4 whitespace-nowrap">
+								<code class="text-xs bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-gray-700 dark:text-gray-300" title={ user.Pubkey }>
+									{ user.Pubkey[:12] }...
+								</code>
+							</td>
+							<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-gray-400">
+								{ user.PreferredLanguage }
+							</td>
+							<td class="px-6 py-4 whitespace-nowrap">
+								if user.Active {
+									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" role="status">
+										<span class="sr-only">Account status:</span>
+										Active
+									</span>
+								} else {
+									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200" role="status">
+										<span class="sr-only">Account status:</span>
+										Inactive
+									</span>
+								}
+							</td>
+							<td class="px-6 py-4 whitespace-nowrap">
+								if user.IsAdmin {
+									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" role="status">
+										<span class="sr-only">User role:</span>
+										Admin
+									</span>
+								} else {
+									<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300" role="status">
+										<span class="sr-only">User role:</span>
+										User
+									</span>
+								}
+							</td>
+							<td class="px-6 py-4 whitespace-nowrap text-sm font-medium flex gap-2">
+								<button
+									hx-get={ fmt.Sprintf("/admin/users-api/%s/edit", user.Pubkey) }
+									hx-target="#userFormModal .modal-content" onclick="showModal()"
+									hx-swap="innerHTML"
+									class="text-indigo-600 hover:text-indigo-900 dark:text-indigo-400 dark:hover:text-indigo-300 focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded px-2 py-1"
+									aria-label={ fmt.Sprintf("Edit user %s", user.Pubkey[:12]) }
+								>
+									Edit
+								</button>
+								<button
+									hx-delete={ fmt.Sprintf("/admin/users-api/%s", user.Pubkey) }
+									hx-confirm="Are you sure you want to delete this user?"
+									hx-target="#alertsContainer"
+									hx-swap="innerHTML swap:1s"
+									class="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300 focus:outline-none focus:ring-2 focus:ring-red-500 rounded px-2 py-1"
+									aria-label={ fmt.Sprintf("Delete user %s", user.Pubkey[:12]) }
+								>
+									Delete
+								</button>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+}
+
+// UserListViewWithPagination renders the users list with pagination
+templ UserListViewWithPagination(users []UserListItem, pagination PaginationInfo) {
+	<div>
+		<!-- User List -->
+		@UserListView(users)
+
+		<!-- Pagination Controls -->
+		if pagination.TotalPages > 1 {
+			<div class="mt-4 flex items-center justify-between bg-white dark:bg-gray-800 px-4 py-3 rounded-lg shadow-md">
+				<div class="flex items-center text-sm text-gray-700 dark:text-gray-300">
+					<span>
+						Showing { fmt.Sprintf("%d", ((pagination.CurrentPage-1)*pagination.ItemsPerPage)+1) } to { fmt.Sprintf("%d", min((pagination.CurrentPage*pagination.ItemsPerPage), pagination.TotalItems)) } of { fmt.Sprintf("%d", pagination.TotalItems) } users
+					</span>
+				</div>
+
+				<nav class="flex items-center gap-2" role="navigation" aria-label="Pagination">
+					<!-- Previous Button -->
+					if pagination.HasPrevPage {
+						<button
+							hx-get={ fmt.Sprintf("/admin/users-api/list?page=%d", pagination.CurrentPage-1) }
+							hx-target=".users-list-container"
+							hx-swap="innerHTML"
+							hx-include="[name='search'], [name='language'], [name='status'], [name='role']"
+							class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+							aria-label="Go to previous page"
+						>
+							Previous
+						</button>
+					} else {
+						<button
+							disabled
+							class="px-3 py-2 text-sm font-medium text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg cursor-not-allowed"
+							aria-label="Previous page (disabled)"
+							aria-disabled="true"
+						>
+							Previous
+						</button>
+					}
+
+					<!-- Page Numbers -->
+					<div class="flex items-center gap-1">
+						for i := 1; i <= pagination.TotalPages; i++ {
+							if i == pagination.CurrentPage {
+								<button
+									disabled
+									class="px-3 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg"
+									aria-current="page"
+									aria-label={ fmt.Sprintf("Page %d (current)", i) }
+								>
+									{ fmt.Sprintf("%d", i) }
+								</button>
+							} else if i == 1 || i == pagination.TotalPages || (i >= pagination.CurrentPage-1 && i <= pagination.CurrentPage+1) {
+								<button
+									hx-get={ fmt.Sprintf("/admin/users-api/list?page=%d", i) }
+									hx-target=".users-list-container"
+									hx-swap="innerHTML"
+									hx-include="[name='search'], [name='language'], [name='status'], [name='role']"
+									class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+									aria-label={ fmt.Sprintf("Go to page %d", i) }
+								>
+									{ fmt.Sprintf("%d", i) }
+								</button>
+							} else if i == pagination.CurrentPage-2 || i == pagination.CurrentPage+2 {
+								<span class="px-2 text-gray-500 dark:text-gray-400">...</span>
+							}
+						}
+					</div>
+
+					<!-- Next Button -->
+					if pagination.HasNextPage {
+						<button
+							hx-get={ fmt.Sprintf("/admin/users-api/list?page=%d", pagination.CurrentPage+1) }
+							hx-target=".users-list-container"
+							hx-swap="innerHTML"
+							hx-include="[name='search'], [name='language'], [name='status'], [name='role']"
+							class="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+							aria-label="Go to next page"
+						>
+							Next
+						</button>
+					} else {
+						<button
+							disabled
+							class="px-3 py-2 text-sm font-medium text-gray-400 dark:text-gray-600 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg cursor-not-allowed"
+							aria-label="Next page (disabled)"
+							aria-disabled="true"
+						>
+							Next
+						</button>
+					}
+				</nav>
+			</div>
+		}
+	</div>
+}
+
+// UserCreateForm renders the create user form
+templ UserCreateForm(languages []SelectOption) {
+	<h2 id="modalTitle" class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Create New User</h2>
+
+	<!-- Error messages container inside modal -->
+	<div id="formErrors" class="mb-4" role="alert" aria-live="assertive"></div>
+
+	<form
+		hx-post="/admin/users-api"
+		hx-target="#formErrors"
+		hx-swap="innerHTML"
+		class="space-y-6"
+		aria-label="Create new user form"
+	>
+		<div>
+			<label for="pubkey-input" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+				Nostr Public Key
+			</label>
+			<input
+				type="text"
+				id="pubkey-input"
+				name="pubkey"
+				placeholder="npub1... or hex format"
+				required
+				aria-required="true"
+				aria-describedby="pubkey-help"
+				class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent"
+			/>
+			<span id="pubkey-help" class="sr-only">Enter the user's Nostr public key in npub1 or hex format</span>
+		</div>
+
+		<div>
+			<label for="language-select" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+				Preferred Language
+			</label>
+			<select
+				id="language-select"
+				name="preferred_language"
+				class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent"
+			>
+				for _, lang := range languages {
+					<option value={ lang.Value }>{ lang.Label }</option>
+				}
+			</select>
+		</div>
+
+		<div class="space-y-3">
+			<label class="flex items-center">
+				<input
+					type="checkbox"
+					name="is_admin"
+					class="w-4 h-4 text-indigo-600 dark:text-indigo-400 rounded focus:ring-indigo-500 dark:focus:ring-indigo-400"
+				/>
+				<span class="ml-3 text-sm text-gray-700 dark:text-gray-300">Administrator privileges</span>
+			</label>
+			<label class="flex items-center">
+				<input
+					type="checkbox"
+					name="active"
+					checked
+					class="w-4 h-4 text-indigo-600 dark:text-indigo-400 rounded focus:ring-indigo-500 dark:focus:ring-indigo-400"
+				/>
+				<span class="ml-3 text-sm text-gray-700 dark:text-gray-300">Account active</span>
+			</label>
+		</div>
+
+		<div class="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+			<button
+				type="button"
+				onclick="closeModal()"
+				class="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+			>
+				Cancel
+			</button>
+			<button
+				type="submit" hx-disabled-elt="this"
+				class="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 dark:hover:bg-indigo-500"
+			>
+				<span class="inline-flex items-center gap-2"><svg class="htmx-indicator w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg><span>Create User</span></span>
+			</button>
+		</div>
+	</form>
+}
+
+// NotificationAlert renders an alert notification
+templ NotificationAlert(alertType string, message string) {
+	<div class={ "p-4 rounded-lg mb-4 flex items-start gap-3",
+		templ.KV("bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700", alertType == "success"),
+		templ.KV("bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700", alertType == "error"),
+		templ.KV("bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700", alertType == "info"),
+	}>
+		if alertType == "success" {
+			<svg class="w-5 h-5 text-green-600 dark:text-green-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+				<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+			</svg>
+			<div class="text-sm text-green-700 dark:text-green-300">{ message }</div>
+		} else if alertType == "error" {
+			<svg class="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+				<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"></path>
+			</svg>
+			<div class="text-sm text-red-700 dark:text-red-300">{ message }</div>
+		} else {
+			<svg class="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+				<path fill-rule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zm-11-1a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0zm3 0a1 1 0 11-2 0 1 1 0 012 0z" clip-rule="evenodd"></path>
+			</svg>
+			<div class="text-sm text-blue-700 dark:text-blue-300">{ message }</div>
+		}
+	</div>
+}
+
+// UserEditForm renders the edit user form
+templ UserEditForm(user UserListItem, languages []SelectOption) {
+	<h2 id="modalTitle" class="text-xl font-semibold text-gray-900 dark:text-white mb-4">Edit User</h2>
+
+	<!-- Error messages container inside modal -->
+	<div id="formErrors" class="mb-4" role="alert" aria-live="assertive"></div>
+
+	<form
+		hx-put={ fmt.Sprintf("/admin/users-api/%s", user.Pubkey) }
+		hx-target="#formErrors"
+		hx-swap="innerHTML"
+		class="space-y-6"
+		aria-label="Edit user form"
+	>
+		<div>
+			<label for="pubkey-display" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+				Nostr Public Key
+			</label>
+			<input
+				type="text"
+				id="pubkey-display"
+				disabled
+				value={ user.Pubkey }
+				aria-label="Public key (read-only)"
+				class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white cursor-not-allowed opacity-75"
+			/>
+		</div>
+
+		<div>
+			<label for="language-select-edit" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+				Preferred Language
+			</label>
+			<select
+				id="language-select-edit"
+				name="preferred_language"
+				class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-transparent"
+			>
+				for _, lang := range languages {
+					<option
+						value={ lang.Value }
+						selected?={ lang.Value == user.PreferredLanguage }
+					>
+						{ lang.Label }
+					</option>
+				}
+			</select>
+		</div>
+
+		<div class="space-y-3">
+			<label class="flex items-center">
+				<input
+					type="checkbox"
+					name="is_admin"
+					checked?={ user.IsAdmin }
+					class="w-4 h-4 text-indigo-600 dark:text-indigo-400 rounded focus:ring-indigo-500 dark:focus:ring-indigo-400"
+				/>
+				<span class="ml-3 text-sm text-gray-700 dark:text-gray-300">Administrator privileges</span>
+			</label>
+			<label class="flex items-center">
+				<input
+					type="checkbox"
+					name="active"
+					checked?={ user.Active }
+					class="w-4 h-4 text-indigo-600 dark:text-indigo-400 rounded focus:ring-indigo-500 dark:focus:ring-indigo-400"
+				/>
+				<span class="ml-3 text-sm text-gray-700 dark:text-gray-300">Account active</span>
+			</label>
+		</div>
+
+		<div class="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+			<button
+				type="button"
+				onclick="closeModal()"
+				class="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600"
+			>
+				Cancel
+			</button>
+			<button
+				type="submit" hx-disabled-elt="this"
+				class="flex-1 px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 dark:hover:bg-indigo-500"
+			>
+				Save Changes
+			</button>
+		</div>
+	</form>
+}

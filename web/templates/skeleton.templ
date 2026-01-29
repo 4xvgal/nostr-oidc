@@ -1,0 +1,39 @@
+package templates
+
+// SkeletonUserList renders a loading skeleton for the user list
+templ SkeletonUserList() {
+	<div class="overflow-x-auto bg-white dark:bg-gray-800 rounded-lg shadow-md">
+		<table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+			<thead class="bg-gray-50 dark:bg-gray-700">
+				<tr>
+					<th class="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider">Public Key</th>
+					<th class="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider">Language</th>
+					<th class="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider">Status</th>
+					<th class="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider">Role</th>
+					<th class="px-6 py-3 text-left text-xs font-medium text-gray-700 dark:text-gray-200 uppercase tracking-wider">Actions</th>
+				</tr>
+			</thead>
+			<tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+				for i := 0; i < 3; i++ {
+					<tr>
+						<td class="px-6 py-4 whitespace-nowrap">
+							<div class="skeleton skeleton-box" style="width: 120px;"></div>
+						</td>
+						<td class="px-6 py-4 whitespace-nowrap">
+							<div class="skeleton skeleton-box" style="width: 60px;"></div>
+						</td>
+						<td class="px-6 py-4 whitespace-nowrap">
+							<div class="skeleton skeleton-box" style="width: 80px;"></div>
+						</td>
+						<td class="px-6 py-4 whitespace-nowrap">
+							<div class="skeleton skeleton-box" style="width: 70px;"></div>
+						</td>
+						<td class="px-6 py-4 whitespace-nowrap">
+							<div class="skeleton skeleton-box" style="width: 100px;"></div>
+						</td>
+					</tr>
+				}
+			</tbody>
+		</table>
+	</div>
+}

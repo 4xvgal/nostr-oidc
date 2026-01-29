@@ -77,7 +77,8 @@ func main() {
 	}
 
 	server := web.Server{
-		Storage: &storage,
+		Storage:     &storage,
+		APIKeyStore: web.NewAPIKeyStore(),
 	}
 
 	if config.RegistrationType == "open" {

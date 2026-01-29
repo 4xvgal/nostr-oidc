@@ -38,9 +38,10 @@ type Storage interface {
 }
 
 type Server struct {
-	Storage      Storage
-	Vertex       *vertex.VertexChecker
-	OIDCProvider op.OpenIDProvider
+	Storage       Storage
+	Vertex        *vertex.VertexChecker
+	OIDCProvider  op.OpenIDProvider
+	APIKeyStore   *APIKeyStore
 }
 
 // simple counter for request IDs
