@@ -1213,3 +1213,148 @@ func (s *storageDB) GetConfig(tx *sql.Tx) (*Configuration, error) {
 
 	return &config, nil
 }
+
+// CreateAPIKey inserts a new API key into the database
+func (s *storageDB) CreateAPIKey(tx *sql.Tx, apiKey *APIKey) error {
+	if tx == nil {
+		panic("tx cannot be nil")
+	}
+	if apiKey == nil {
+		panic("apiKey cannot be nil")
+	}
+
+	query := `
+		INSERT INTO api_keys (id, label, key_prefix, key_hash, created_at, last_used_at, created_by, is_active)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return fmt.Errorf("tx.Prepare(CreateAPIKey): %w", err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(
+		apiKey.ID,
+		apiKey.Label,
+		apiKey.KeyPrefix,
+		apiKey.KeyHash,
+		apiKey.CreatedAt,
+		apiKey.LastUsedAt,
+		apiKey.CreatedBy,
+		apiKey.IsActive,
+	)
+	if err != nil {
+		return fmt.Errorf("stmt.Exec(CreateAPIKey): %w", err)
+	}
+
+	return nil
+}
+
+// SearchAPIKeyByHash retrieves an API key by its hash
+func (s *storageDB) SearchAPIKeyByHash(tx *sql.Tx, keyHash string) (*APIKey, error) {
+	if tx == nil {
+		panic("tx cannot be nil")
+	}
+
+	query := `
+		SELECT id, label, key_prefix, key_hash, created_at, last_used_at, created_by, is_active
+		FROM api_keys
+		WHERE key_hash = ? AND is_active = 1`
+
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return nil, fmt.Errorf("tx.Prepare(SearchAPIKeyByHash): %w", err)
+	}
+	defer stmt.Close()
+
+	var apiKey APIKey
+	row := stmt.QueryRow(keyHash)
+
+	err = apiKey.ScanRow(row)
+	if err != nil {
+		return nil, fmt.Errorf("apiKey.ScanRow(SearchAPIKeyByHash): %w", err)
+	}
+
+	return &apiKey, nil
+}
+
+// UpdateAPIKeyLastUsed updates the last_used_at timestamp for an API key
+func (s *storageDB) UpdateAPIKeyLastUsed(tx *sql.Tx, keyHash string) error {
+	if tx == nil {
+		panic("tx cannot be nil")
+	}
+
+	query := `UPDATE api_keys SET last_used_at = ? WHERE key_hash = ?`
+
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return fmt.Errorf("tx.Prepare(UpdateAPIKeyLastUsed): %w", err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(time.Now(), keyHash)
+	if err != nil {
+		return fmt.Errorf("stmt.Exec(UpdateAPIKeyLastUsed): %w", err)
+	}
+
+	return nil
+}
+
+// GetAllAPIKeys retrieves all API keys from the database
+func (s *storageDB) GetAllAPIKeys(tx *sql.Tx) ([]APIKey, error) {
+	if tx == nil {
+		panic("tx cannot be nil")
+	}
+
+	query := `
+		SELECT id, label, key_prefix, key_hash, created_at, last_used_at, created_by, is_active
+		FROM api_keys
+		ORDER BY created_at DESC`
+
+	rows, err := tx.Query(query)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return []APIKey{}, nil
+		}
+		return nil, fmt.Errorf("tx.Query(GetAllAPIKeys): %w", err)
+	}
+	defer rows.Close()
+
+	var apiKeys []APIKey
+	for rows.Next() {
+		var apiKey APIKey
+		err := apiKey.ScanRow(rows)
+		if err != nil {
+			return nil, fmt.Errorf("apiKey.ScanRow(GetAllAPIKeys): %w", err)
+		}
+		apiKeys = append(apiKeys, apiKey)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows.Err(GetAllAPIKeys): %w", err)
+	}
+
+	return apiKeys, nil
+}
+
+// DeleteAPIKey removes an API key by ID
+func (s *storageDB) DeleteAPIKey(tx *sql.Tx, id string) error {
+	if tx == nil {
+		panic("tx cannot be nil")
+	}
+
+	query := `DELETE FROM api_keys WHERE id = ?`
+
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return fmt.Errorf("tx.Prepare(DeleteAPIKey): %w", err)
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(id)
+	if err != nil {
+		return fmt.Errorf("stmt.Exec(DeleteAPIKey): %w", err)
+	}
+
+	return nil
+}

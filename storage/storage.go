@@ -1557,5 +1557,135 @@ func (s *Storage) AddUser(ctx context.Context, user User) error {
 		return fmt.Errorf("tx.Commit(). %w", err)
 	}
 	return nil
-	// return nil
+}
+
+// DeleteUser removes a user by ID (wrapper for DB method)
+func (s *Storage) DeleteUser(ctx context.Context, id string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("s.db.BeginTx(ctx). %w", err)
+	}
+	defer tx.Rollback()
+
+	err = s.db.DeleteUser(tx, id)
+	if err != nil {
+		return fmt.Errorf("s.db.DeleteUser(tx, id). %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("tx.Commit(). %w", err)
+	}
+	return nil
+}
+
+// CreateAPIKey generates a new API key and stores it in the database
+// Returns the APIKey info and the raw key (which should be shown only once to the user)
+func (s *Storage) CreateAPIKey(ctx context.Context, label, createdBy string) (*APIKey, string, error) {
+	// Generate the raw API key
+	rawKey, err := GenerateAPIKey()
+	if err != nil {
+		return nil, "", fmt.Errorf("GenerateAPIKey: %w", err)
+	}
+
+	// Hash the key for storage
+	keyHash := HashAPIKey(rawKey)
+	keyPrefix := ExtractKeyPrefix(rawKey)
+
+	apiKey := &APIKey{
+		ID:         uuid.NewString(),
+		Label:      label,
+		KeyPrefix:  keyPrefix,
+		KeyHash:    keyHash,
+		CreatedAt:  time.Now(),
+		LastUsedAt: nil,
+		CreatedBy:  createdBy,
+		IsActive:   true,
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, "", fmt.Errorf("s.db.BeginTx(ctx). %w", err)
+	}
+	defer tx.Rollback()
+
+	err = s.db.CreateAPIKey(tx, apiKey)
+	if err != nil {
+		return nil, "", fmt.Errorf("s.db.CreateAPIKey(tx, apiKey). %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return nil, "", fmt.Errorf("tx.Commit(). %w", err)
+	}
+
+	return apiKey, rawKey, nil
+}
+
+// ValidateAPIKey authenticates an API key and updates its last_used_at timestamp
+func (s *Storage) ValidateAPIKey(ctx context.Context, rawKey string) (*APIKey, error) {
+	keyHash := HashAPIKey(rawKey)
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("s.db.BeginTx(ctx). %w", err)
+	}
+	defer tx.Rollback()
+
+	apiKey, err := s.db.SearchAPIKeyByHash(tx, keyHash)
+	if err != nil {
+		return nil, fmt.Errorf("s.db.SearchAPIKeyByHash(tx, keyHash). %w", err)
+	}
+
+	// Update last_used_at (best effort - don't fail authentication if this fails)
+	_ = s.db.UpdateAPIKeyLastUsed(tx, keyHash)
+
+	err = tx.Commit()
+	if err != nil {
+		return nil, fmt.Errorf("tx.Commit(). %w", err)
+	}
+
+	return apiKey, nil
+}
+
+// GetAllAPIKeys retrieves all API keys
+func (s *Storage) GetAllAPIKeys(ctx context.Context) ([]APIKey, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("s.db.BeginTx(ctx). %w", err)
+	}
+	defer tx.Rollback()
+
+	apiKeys, err := s.db.GetAllAPIKeys(tx)
+	if err != nil {
+		return nil, fmt.Errorf("s.db.GetAllAPIKeys(tx). %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return nil, fmt.Errorf("tx.Commit(). %w", err)
+	}
+
+	return apiKeys, nil
+}
+
+// DeleteAPIKey removes an API key by ID
+func (s *Storage) DeleteAPIKey(ctx context.Context, id string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("s.db.BeginTx(ctx). %w", err)
+	}
+	defer tx.Rollback()
+
+	err = s.db.DeleteAPIKey(tx, id)
+	if err != nil {
+		return fmt.Errorf("s.db.DeleteAPIKey(tx, id). %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("tx.Commit(). %w", err)
+	}
+
+	return nil
 }

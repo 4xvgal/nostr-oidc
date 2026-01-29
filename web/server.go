@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/lescuer97/nostr-oicd/storage"
 	"github.com/lescuer97/nostr-oicd/vertex"
 	"github.com/zitadel/logging"
 	"golang.org/x/text/language"
@@ -21,11 +22,19 @@ const (
 	pathLoggedOut = "/logged-out"
 )
 
+type apiKeyManagement interface {
+	CreateAPIKey(ctx context.Context, label, createdBy string) (*storage.APIKey, string, error)
+	ValidateAPIKey(ctx context.Context, rawKey string) (*storage.APIKey, error)
+	GetAllAPIKeys(ctx context.Context) ([]storage.APIKey, error)
+	DeleteAPIKey(ctx context.Context, id string) error
+}
+
 type Storage interface {
 	op.Storage
 	authenticate
 	deviceAuthenticate
 	administration
+	apiKeyManagement
 }
 
 type Server struct {
@@ -121,6 +130,10 @@ func SetupServer(server *Server, extraOptions ...op.Option) chi.Router {
 	adminRouter := NewAdminHandler(server)
 	// router.Mount("/admin", http.StripPrefix("/admin", adminRouter))
 	router.Mount("/admin", adminRouter)
+
+	// Mount API admin routes
+	apiAdminRouter := NewAPIAdminHandler(server)
+	router.Mount("/api/admin", apiAdminRouter)
 
 	router.Route("/device", func(r chi.Router) {
 		registerDeviceAuth(server.Storage, r)

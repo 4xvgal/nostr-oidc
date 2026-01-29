@@ -29,6 +29,7 @@ type administration interface {
 	GetUserById(ctx context.Context, id string) (*storage.User, error)
 	// AddUser(ctx context.Context, client storage.User) error
 	EditUser(ctx context.Context, client storage.User) error
+	DeleteUser(ctx context.Context, id string) error
 
 	// New methods for configuration management
 	GetConfiguration(ctx context.Context) (*storage.Configuration, error)
